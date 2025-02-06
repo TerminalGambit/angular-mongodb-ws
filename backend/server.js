@@ -7,11 +7,17 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// Get MongoDB connection string from environment variables or default to Docker Compose service
+const MONGO_URI = process.env.MONGO_URI || "mongodb://mongodb:27017/quicknotes"; // ✅ Fixed
+
 // Connect to MongoDB
-mongoose.connect("mongodb://localhost:27017/quicknotes", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-});
+mongoose
+    .connect(MONGO_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+    })
+    .then(() => console.log("✅ MongoDB Connected"))
+    .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
 // Define the Note schema and model
 const NoteSchema = new mongoose.Schema({ content: String });
@@ -24,6 +30,7 @@ app.post("/notes", async (req, res) => {
         await newNote.save();
         res.json(newNote);
     } catch (error) {
+        console.error("❌ Error creating note:", error);
         res.status(500).json({ error: "Failed to create a new note" });
     }
 });
@@ -34,6 +41,7 @@ app.get("/notes", async (req, res) => {
         const notes = await Note.find();
         res.json(notes);
     } catch (error) {
+        console.error("❌ Error fetching notes:", error);
         res.status(500).json({ error: "Failed to fetch notes" });
     }
 });
@@ -42,11 +50,13 @@ app.get("/notes", async (req, res) => {
 app.delete("/notes/:id", async (req, res) => {
     try {
         await Note.findByIdAndDelete(req.params.id);
-        res.json({ message: "Deleted" });
+        res.json({ message: "✅ Note Deleted" });
     } catch (error) {
+        console.error("❌ Error deleting note:", error);
         res.status(500).json({ error: "Failed to delete the note" });
     }
 });
 
 // Start the server on port 5001
-app.listen(5001, () => console.log("Server running on port 5001"));
+const PORT = process.env.PORT || 5001; // ✅ Allows flexibility if deployed elsewhere
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

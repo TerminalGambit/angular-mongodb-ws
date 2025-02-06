@@ -1,0 +1,208 @@
+Deploying and Hosting Your Angular & Node.js (MongoDB) App on Apache
+
+Since Apache is primarily a web server, it can directly serve your Angular frontend, but it cannot run your Node.js backend natively. You will need a process manager (like PM2) and reverse proxy (like Apache’s mod_proxy) to handle backend requests.
+
+Step 1: Setup Your Server (Linux VPS or Local Apache)
+
+If you don’t have Apache installed, install it with:
+
+sudo apt update
+sudo apt install apache2
+
+Enable necessary Apache modules:
+
+sudo a2enmod proxy proxy_http rewrite headers
+sudo systemctl restart apache2
+
+Step 2: Deploy the Angular Frontend on Apache
+
+1. Build Your Angular App
+
+ng build --configuration=production
+
+	•	This will create a dist/ folder with your compiled frontend files.
+
+2. Move Built Files to Apache’s Web Root
+
+Copy the Angular build output (dist) to the Apache web root directory (/var/www/html or a virtual host directory):
+
+sudo cp -r dist/frontend/* /var/www/html/
+
+Set proper permissions:
+
+sudo chown -R www-data:www-data /var/www/html/
+sudo chmod -R 755 /var/www/html/
+
+3. Configure Apache to Serve the Angular App
+
+Edit the Apache configuration file:
+
+sudo nano /etc/apache2/sites-available/000-default.conf
+
+Replace the contents with:
+
+<VirtualHost *:80>
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+
+    <Directory /var/www/html/>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+
+Enable the new configuration and restart Apache:
+
+sudo systemctl restart apache2
+
+4. Handle Angular Routes with .htaccess
+
+Inside /var/www/html/, create a .htaccess file:
+
+sudo nano /var/www/html/.htaccess
+
+Add:
+
+<IfModule mod_rewrite.c>
+    RewriteEngine on
+    RewriteBase /
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule . /index.html [L]
+</IfModule>
+
+This ensures Angular’s routing works properly.
+
+Step 3: Deploy the Node.js (Express) Backend
+
+1. Copy Backend Files to the Server
+
+Copy your backend project to /var/www/backend:
+
+scp -r backend/ user@your-server-ip:/var/www/backend
+
+Or, move it manually inside the server:
+
+sudo mkdir -p /var/www/backend
+sudo mv backend/* /var/www/backend/
+
+2. Install Dependencies
+
+Navigate to your backend folder and install the required packages:
+
+cd /var/www/backend
+npm install
+
+3. Start the Backend Using PM2
+
+PM2 will ensure your backend runs continuously:
+
+sudo npm install -g pm2
+pm2 start server.js --name "backend"
+pm2 save
+pm2 startup
+
+This ensures that your Node.js backend runs even after a server restart.
+
+Step 4: Configure Apache to Proxy Requests to the Node.js Backend
+
+Edit the Apache configuration:
+
+sudo nano /etc/apache2/sites-available/000-default.conf
+
+Modify it to include a reverse proxy for your backend:
+
+<VirtualHost *:80>
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+
+    <Directory /var/www/html/>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    # Proxy requests to Node.js backend
+    ProxyPass /api http://127.0.0.1:5001/
+    ProxyPassReverse /api http://127.0.0.1:5001/
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+
+Restart Apache to apply changes:
+
+sudo systemctl restart apache2
+
+Step 5: Configure MongoDB
+
+If you are using MongoDB Atlas, configure your .env file in the backend:
+
+MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/dbname?retryWrites=true&w=majority
+
+If using a local MongoDB:
+	1.	Install MongoDB:
+
+sudo apt install mongodb
+
+	2.	Start MongoDB:
+
+sudo systemctl start mongodb
+sudo systemctl enable mongodb
+
+	3.	Ensure your backend connects to mongodb://127.0.0.1:27017/dbname
+
+Step 6: Test Your Deployment
+	•	Frontend (Angular): Go to http://your-server-ip/
+	•	Backend (Node.js API): Test http://your-server-ip/api/notes
+	•	MongoDB: Check if the API retrieves data.
+
+Step 7: Automate Deployment (Optional)
+
+You can create a deployment script to simplify future updates:
+
+#!/bin/bash
+
+# Navigate to backend and update
+cd /var/www/backend
+git pull origin main
+npm install
+pm2 restart backend
+
+# Navigate to frontend and update
+cd /var/www/html
+git pull origin main
+ng build --configuration=production
+sudo cp -r dist/frontend/* /var/www/html/
+sudo systemctl restart apache2
+
+echo "Deployment Complete!"
+
+Save it as deploy.sh and run:
+
+chmod +x deploy.sh
+./deploy.sh
+
+Summary of the Setup
+	•	Frontend (Angular) is served by Apache in /var/www/html
+	•	Backend (Node.js) runs via PM2 and is proxied by Apache.
+	•	MongoDB (Atlas or local) stores the data.
+
+Pros of Using Apache
+
+✅ Stable and well-supported
+✅ Can handle frontend and backend proxying
+✅ Works with PM2 for backend process management
+
+Cons
+
+❌ More manual setup compared to containers
+❌ Scaling is harder than using cloud solutions like Render or Railway
+
+Would You Like Help Automating the Full Deployment?
+
+I can write a more detailed Ansible playbook or Bash script to fully automate this if you’re interested! 🚀
