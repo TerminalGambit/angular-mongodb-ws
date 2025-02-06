@@ -8,9 +8,8 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Get MongoDB connection string from environment variables or default to Docker Compose service
-const MONGO_URI =
-    process.env.MONGO_URL || "mongodb://mongodb:27017/quicknotes"; // ✅ Updated for Railway compatibility
+// Get MongoDB connection string from environment variables or default to local Docker service
+const MONGO_URI = process.env.MONGO_URL || "mongodb://mongodb:27017/quicknotes";
 
 // Connect to MongoDB
 mongoose
@@ -19,22 +18,27 @@ mongoose
         useUnifiedTopology: true,
     })
     .then(() => console.log("✅ MongoDB Connected"))
-    .catch((err) => console.error("❌ MongoDB Connection Error:", err));
+    .catch((err) => {
+        console.error("❌ MongoDB Connection Error:", err);
+        process.exit(1); // Exit process if MongoDB fails
+    });
 
 // Define the Note schema and model
 const NoteSchema = new mongoose.Schema({
     content: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now }, // ✅ Added timestamps for better tracking
+    createdAt: { type: Date, default: Date.now },
 });
 const Note = mongoose.model("Note", NoteSchema);
 
-// API endpoint to create a new note
+// 📝 Create a new note
 app.post("/notes", async (req, res) => {
     try {
-        if (!req.body.content) {
-            return res.status(400).json({ error: "Note content is required" }); // ✅ Error handling
+        const { content } = req.body;
+        if (!content || content.trim() === "") {
+            return res.status(400).json({ error: "Note content is required" });
         }
-        const newNote = new Note({ content: req.body.content });
+
+        const newNote = new Note({ content });
         await newNote.save();
         res.status(201).json(newNote);
     } catch (error) {
@@ -43,10 +47,10 @@ app.post("/notes", async (req, res) => {
     }
 });
 
-// API endpoint to fetch all notes
+// 📜 Fetch all notes (sorted newest first)
 app.get("/notes", async (req, res) => {
     try {
-        const notes = await Note.find().sort({ createdAt: -1 }); // ✅ Sorted by newest first
+        const notes = await Note.find().sort({ createdAt: -1 });
         res.json(notes);
     } catch (error) {
         console.error("❌ Error fetching notes:", error);
@@ -54,12 +58,12 @@ app.get("/notes", async (req, res) => {
     }
 });
 
-// API endpoint to delete a note
+// 🗑 Delete a note by ID
 app.delete("/notes/:id", async (req, res) => {
     try {
         const deletedNote = await Note.findByIdAndDelete(req.params.id);
         if (!deletedNote) {
-            return res.status(404).json({ error: "Note not found" }); // ✅ Proper 404 handling
+            return res.status(404).json({ error: "Note not found" });
         }
         res.json({ message: "✅ Note Deleted", deletedNote });
     } catch (error) {
@@ -68,11 +72,11 @@ app.delete("/notes/:id", async (req, res) => {
     }
 });
 
-// Health check endpoint (useful for Railway & Kubernetes)
+// 🔍 Health check endpoint (useful for Railway, Kubernetes, etc.)
 app.get("/health", (req, res) => {
     res.json({ status: "✅ API is running", timestamp: new Date().toISOString() });
 });
 
-// Start the server on a dynamic port (Railway) or 5001 locally
+// Start the server on a dynamic port (Railway, Docker) or 5001 locally
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
